@@ -1,0 +1,5 @@
+# built compiler binary
+reference/tinc
+
+# assembler output / linked executables from ad-hoc runs
+*.s
