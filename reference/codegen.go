@@ -27,6 +27,9 @@ type gen struct {
 }
 
 func codegen(prog *Program) string {
+	if !hasMain(prog) {
+		fatalf(0, "no 'main' function to run")
+	}
 	g := &gen{}
 	g.line("    .section .rodata")
 	g.line(".LC0:")
@@ -37,6 +40,15 @@ func codegen(prog *Program) string {
 		g.function(&prog.Funcs[i])
 	}
 	return g.buf.String()
+}
+
+func hasMain(p *Program) bool {
+	for i := range p.Funcs {
+		if p.Funcs[i].Name == "main" {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *gen) line(s string) { g.buf.WriteString(s); g.buf.WriteByte('\n') }

@@ -242,6 +242,32 @@ at once, with a caret pointing at the exact column — but error recovery is a
 substantial topic that would swamp the parser chapter. We take the honest
 shortcut and note it. See [`advanced.md`](advanced.md).
 
+### Sharp edges
+
+Three deliberate simplifications, worth knowing before they surprise you:
+
+- **Variables are function-scoped, not block-scoped.** A `let` inside an `if`
+  or `while` reuses an outer variable of the same name rather than shadowing
+  it. So this prints `2` then `2`, not `2` then `1`:
+
+  ```tin
+  let x = 1;
+  if 1 { let x = 2; print x; }
+  print x;
+  ```
+
+  We'll see why in [chapter 6](#variables-and-frames): every variable gets one
+  frame slot, keyed by name.
+
+- **A `main` function is required.** The compiler reports
+  `no 'main' function to run` up front, rather than letting the failure surface
+  later as a cryptic `undefined reference to 'main'` from the linker.
+
+- **Division by zero is not checked.** `1 / 0` compiles and then crashes at
+  runtime with `SIGFPE`, straight from the CPU's `idivq`. Guarding it would
+  mean generating a runtime check around every division — a fine exercise, left
+  out here.
+
 ---
 
 ## 3. The lexer
