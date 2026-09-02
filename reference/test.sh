@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# End-to-end check: compile each example, assemble+link with gcc, run it,
-# and compare stdout to the matching .out file.
+# reference/test.sh — end-to-end check: compile each example, assemble and link
+# with gcc, run it, and compare stdout to the matching .out file.
 set -euo pipefail
 cd "$(dirname "$0")"
 
