@@ -6,17 +6,35 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: tinc <file.tin>")
+	// Optional leading flag: -tokens or -ast stops the pipeline early and
+	// dumps the intermediate form, which is handy for following along and
+	// for debugging. With no flag, tinc runs the whole pipeline.
+	args := os.Args[1:]
+	mode := "compile"
+	if len(args) > 0 && (args[0] == "-tokens" || args[0] == "-ast") {
+		mode = args[0][1:]
+		args = args[1:]
+	}
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: tinc [-tokens|-ast] <file.tin>")
 		os.Exit(2)
 	}
-	src, err := os.ReadFile(os.Args[1])
+	src, err := os.ReadFile(args[0])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tinc: %v\n", err)
 		os.Exit(1)
 	}
+
 	toks := lex(string(src))
+	if mode == "tokens" {
+		dumpTokens(toks)
+		return
+	}
 	prog := parse(toks)
+	if mode == "ast" {
+		dumpAST(prog)
+		return
+	}
 	fmt.Print(codegen(prog))
 }
 
