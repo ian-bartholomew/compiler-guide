@@ -39,8 +39,10 @@ func dumpStmts(ss []Stmt, d int) {
 	}
 }
 
+// dumpStmt prints one statement, indented by depth d, recursing into the bodies
+// of if and while. The type switch has one case per statement node.
 func dumpStmt(s Stmt, d int) {
-	pad := strings.Repeat("  ", d)
+	pad := strings.Repeat("  ", d) // two spaces per nesting level
 	switch s := s.(type) {
 	case *LetStmt:
 		fmt.Printf("%slet %s = %s\n", pad, s.Name, exprStr(s.Value))
@@ -65,6 +67,8 @@ func dumpStmt(s Stmt, d int) {
 	}
 }
 
+// exprStr renders an expression as a parenthesized S-expression, e.g. (+ 1
+// (* 2 3)). It recurses into subexpressions, so the nesting shows precedence.
 func exprStr(e Expr) string {
 	switch e := e.(type) {
 	case *IntLit:

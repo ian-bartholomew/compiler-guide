@@ -31,12 +31,14 @@ func codegen(prog *Program) string {
 		fatalf(0, "no 'main' function to run")
 	}
 	g := &gen{}
+	// Read-only data section: the printf format string, labelled .LC0.
 	g.line("    .section .rodata")
 	g.line(".LC0:")
 	g.line("    .string \"%ld\\n\"") // printf format: 64-bit int + newline
+	// Code section, and expose main so the C runtime can call into it.
 	g.line("    .text")
 	g.line("    .globl main")
-	for i := range prog.Funcs {
+	for i := range prog.Funcs { // one function at a time
 		g.function(&prog.Funcs[i])
 	}
 	return g.buf.String()
@@ -51,7 +53,7 @@ func hasMain(p *Program) bool {
 	return false
 }
 
-func (g *gen) line(s string) { g.buf.WriteString(s); g.buf.WriteByte('\n') }
+func (g *gen) line(s string)  { g.buf.WriteString(s); g.buf.WriteByte('\n') }
 func (g *gen) label(s string) { g.line(s + ":") }
 func (g *gen) emit(format string, args ...interface{}) {
 	g.buf.WriteString("    ")
@@ -74,10 +76,10 @@ func (g *gen) function(f *FuncDecl) {
 	frame := align16(slot * 8)
 
 	g.label(f.Name)
-	g.emit("pushq %%rbp")
-	g.emit("movq %%rsp, %%rbp")
+	g.emit("pushq %%rbp")       // save the caller's frame pointer
+	g.emit("movq %%rsp, %%rbp") // anchor our own frame pointer here
 	if frame > 0 {
-		g.emit("subq $%d, %%rsp", frame)
+		g.emit("subq $%d, %%rsp", frame) // reserve the locals' space
 	}
 	// Spill incoming parameters from their argument registers into slots.
 	for i, name := range f.Params {
@@ -133,23 +135,23 @@ func (g *gen) stmts(ss []Stmt) {
 
 func (g *gen) stmt(s Stmt) {
 	switch s := s.(type) {
-	case *LetStmt:
+	case *LetStmt: // let x = expr; — evaluate, then store into x's slot
 		g.expr(s.Value)
 		g.emit("movq %%rax, %d(%%rbp)", g.offset(s.Name))
-	case *AssignStmt:
+	case *AssignStmt: // x = expr; — same, but x's slot already exists
 		g.expr(s.Value)
 		g.emit("movq %%rax, %d(%%rbp)", g.offset(s.Name))
-	case *ReturnStmt:
+	case *ReturnStmt: // return expr; — value into %rax, then tear down the frame
 		g.expr(s.Value)
 		g.emit("leave")
 		g.emit("ret")
-	case *PrintStmt:
+	case *PrintStmt: // print expr; — hand the value to libc printf
 		g.expr(s.Value)
-		g.emit("movq %%rax, %%rsi")
-		g.emit("leaq .LC0(%%rip), %%rdi")
-		g.emit("movq $0, %%rax")
+		g.emit("movq %%rax, %%rsi")       // value -> printf's 2nd argument
+		g.emit("leaq .LC0(%%rip), %%rdi") // "%ld\n" -> printf's 1st argument
+		g.emit("movq $0, %%rax")          // 0 vector registers used (varargs rule)
 		g.callAligned("printf@PLT")
-	case *ExprStmt:
+	case *ExprStmt: // a bare expression; its %rax result is discarded
 		g.expr(s.X)
 	case *IfStmt:
 		g.ifStmt(s)
@@ -162,10 +164,10 @@ func (g *gen) ifStmt(s *IfStmt) {
 	els := g.newLabel()
 	end := g.newLabel()
 	g.expr(s.Cond)
-	g.emit("cmpq $0, %%rax")
-	g.emit("je %s", els)
+	g.emit("cmpq $0, %%rax") // is the condition false (== 0)?
+	g.emit("je %s", els)     // if so, jump past the then-branch
 	g.stmts(s.Then)
-	g.emit("jmp %s", end)
+	g.emit("jmp %s", end) // then-branch done: skip the else-branch
 	g.label(els)
 	g.stmts(s.Else) // nil is fine — emits nothing
 	g.label(end)
@@ -174,12 +176,12 @@ func (g *gen) ifStmt(s *IfStmt) {
 func (g *gen) whileStmt(s *WhileStmt) {
 	start := g.newLabel()
 	end := g.newLabel()
-	g.label(start)
+	g.label(start) // loop top: the condition is re-tested every pass
 	g.expr(s.Cond)
-	g.emit("cmpq $0, %%rax")
-	g.emit("je %s", end)
+	g.emit("cmpq $0, %%rax") // is the condition false (== 0)?
+	g.emit("je %s", end)     // if so, exit the loop
 	g.stmts(s.Body)
-	g.emit("jmp %s", start)
+	g.emit("jmp %s", start) // otherwise loop back to the top
 	g.label(end)
 }
 
@@ -192,9 +194,9 @@ func (g *gen) newLabel() string {
 // expr generates code that leaves its result in %rax.
 func (g *gen) expr(e Expr) {
 	switch e := e.(type) {
-	case *IntLit:
+	case *IntLit: // a constant: load it straight into %rax
 		g.emit("movq $%d, %%rax", e.Value)
-	case *Var:
+	case *Var: // a variable: load from its frame slot
 		g.emit("movq %d(%%rbp), %%rax", g.offset(e.Name))
 	case *Unary: // only "-"
 		g.expr(e.X)
